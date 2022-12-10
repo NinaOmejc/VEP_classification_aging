@@ -7,7 +7,7 @@ import numpy as np
 from collections import Counter
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import (accuracy_score, balanced_accuracy_score, roc_auc_score, f1_score, precision_score, recall_score)
+from sklearn.metrics import (confusion_matrix, accuracy_score, balanced_accuracy_score, roc_auc_score, f1_score, precision_score, recall_score)
 from sklearn.inspection import permutation_importance
 from imblearn.over_sampling import SMOTE
 from imblearn.over_sampling import RandomOverSampler
@@ -168,8 +168,8 @@ def classify_allsubs(data, classifier, classifier_name, nSamples, nFeatures, nCl
         "f1_total": f1_total,
         "importance_acc_total": importance_acc_total,
         "importance_acc_std_total": importance_acc_std_total,
-        "importance_accbal_total": importance_acc_total,
-        "importance_accbal_std_total": importance_acc_std_total,
+        "importance_accbal_total": importance_accbal_total,
+        "importance_accbal_std_total": importance_accbal_std_total,
         "importance_auc_total": importance_auc_total,
         "importance_auc_std_total": importance_auc_std_total,
         "importance_mi_total": importance_mi_total,

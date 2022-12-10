@@ -8,18 +8,19 @@ from scipy import stats, io
 from collections import Counter
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import (accuracy_score, balanced_accuracy_score, roc_auc_score, f1_score, precision_score, recall_score)
+from sklearn.metrics import (confusion_matrix, accuracy_score, balanced_accuracy_score, roc_auc_score, f1_score, precision_score, recall_score)
 from sklearn.inspection import permutation_importance
 from imblearn.over_sampling import SMOTE
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
 from sklearn.feature_selection import mutual_info_classif
 
-def classify_bysub(data, classifier, classifier_name, nSubs, nSamples, nFeatures, nClasses, ID, labels, age, balancing, ma_win, time_switch):
+def classify_bysub(data, classifier, classifier_name, nSubs, nSamples, nFeatures, nClasses, ID, labels, age_coded, balancing, ma_win, time_switch):
 
     # initialize overall metrics for classifier evaluation and feature importance over time
     age_compact = np.empty(nSubs, dtype=int)
     probs_total = np.empty((nClasses, nSamples, nSubs))
+    cm_total = np.empty((nClasses*2, nSamples, nSubs))
     acc_total = np.empty((nSamples, nSubs))
     acc_std_total = np.empty((nSamples, nSubs))
     accbal_total = np.empty((nSamples, nSubs))
@@ -38,14 +39,15 @@ def classify_bysub(data, classifier, classifier_name, nSubs, nSamples, nFeatures
     importance_mi_total = np.empty((nFeatures, nSamples, nSubs))
 
     # get classification for each subject separately
-    isub = 0
+    isub=0
     for iid in np.unique(ID):
         sub_idx = np.where(ID == iid)
-        age_compact[isub] = max(set(age[sub_idx]), key=list(age[sub_idx]).count) # age; 0: young, 1: older
+        age_compact[isub] = max(set(age_coded[sub_idx]), key=list(age_coded[sub_idx]).count) # age; 0: young, 1: older
         data_sub = np.squeeze(data[sub_idx, :]) if 'notime' in time_switch else np.squeeze(data[sub_idx, :, :])
 
         # set empty variables for results of each subject
         probs_sub = np.empty((nClasses, nSamples))
+        cm_sub = np.empty((nClasses*2, nSamples))
         acc_sub = np.empty(nSamples)
         acc_std_sub = np.empty(nSamples)
         accbal_sub = np.empty(nSamples)
@@ -80,6 +82,7 @@ def classify_bysub(data, classifier, classifier_name, nSubs, nSamples, nFeatures
 
             #  initialize evaluation metrics for each time point (averaged over k-folds)
             probs_kfold = np.zeros(nClasses)
+            cm_kfold = np.zeros(nClasses*2)
             acc_kfold = np.zeros(1)
             acc_std_kfold = []
             accbal_kfold = np.zeros(1)
@@ -147,6 +150,7 @@ def classify_bysub(data, classifier, classifier_name, nSubs, nSamples, nFeatures
                 y_pred_prob = classifier.predict_proba(X_test_norm)
 
                 probs_kfold += np.mean(y_pred_prob, axis=0)
+                cm_kfold += confusion_matrix(y_test_orig, y_pred).reshape(nClasses*2)
                 acc_kfold += accuracy_score(y_test_orig, y_pred)
                 acc_std_kfold.append(accuracy_score(y_test_orig, y_pred))
                 accbal_kfold += balanced_accuracy_score(y_test_orig, y_pred)
@@ -174,6 +178,7 @@ def classify_bysub(data, classifier, classifier_name, nSubs, nSamples, nFeatures
 
             # save an average of kfold scores for a specific subject at specific time point
             probs_sub[:, itime] = np.float64(probs_kfold / nFolds)
+            cm_sub[:, itime] = np.float64(cm_kfold / nFolds)
             acc_sub[itime] = np.float64(acc_kfold / nFolds)
             acc_std_sub[itime] = np.std(acc_std_kfold)
             accbal_sub[itime] = np.float64(acc_kfold / nFolds)
@@ -193,6 +198,7 @@ def classify_bysub(data, classifier, classifier_name, nSubs, nSamples, nFeatures
 
         # save metrics for one subject at all time points
         probs_total[:, :, isub] = probs_sub
+        cm_total[:, :, isub] = cm_sub
         acc_total[:, isub] = acc_sub
         acc_std_total[:, isub] = acc_std_sub
         accbal_total[:, isub] = accbal_sub
@@ -214,6 +220,7 @@ def classify_bysub(data, classifier, classifier_name, nSubs, nSamples, nFeatures
 
     results = {
         "probs_total": probs_total,
+        "cm_total": cm_total,
         "acc_total": acc_total,
         "acc_std_total": acc_std_total,
         "accbal_total": accbal_total,
@@ -225,8 +232,8 @@ def classify_bysub(data, classifier, classifier_name, nSubs, nSamples, nFeatures
         "f1_total": f1_total,
         "importance_acc_total": importance_acc_total,
         "importance_acc_std_total": importance_acc_std_total,
-        "importance_accbal_total": importance_acc_total,
-        "importance_accbal_std_total": importance_acc_std_total,
+        "importance_accbal_total": importance_accbal_total,
+        "importance_accbal_std_total": importance_accbal_std_total,
         "importance_auc_total": importance_auc_total,
         "importance_auc_std_total": importance_auc_std_total,
         "importance_mi_total": importance_mi_total,

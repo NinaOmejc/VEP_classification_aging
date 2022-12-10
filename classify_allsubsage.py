@@ -1,6 +1,6 @@
 # This function is called by classify_main.
 # The classifier learns and predicts on all subjects separately but specific
-# for target=age group. Should be eventually merged with classify_allsubs.
+# for target=age group.
 # Last updated 18.11.2022, Nina Omejc
 
 # packages
@@ -8,7 +8,7 @@ import numpy as np
 from collections import Counter
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import (accuracy_score, balanced_accuracy_score, roc_auc_score, f1_score, precision_score, recall_score)
+from sklearn.metrics import (confusion_matrix, accuracy_score, balanced_accuracy_score, roc_auc_score, f1_score, precision_score, recall_score)
 from sklearn.inspection import permutation_importance
 from imblearn.over_sampling import SMOTE
 from imblearn.over_sampling import RandomOverSampler
@@ -20,6 +20,7 @@ def classify_allsubsage(data, classifier, classifier_name, nSubs, nSamples, nFea
 
     # initialize overall metrics for classifier evaluation and feature importance over time
     probs_total = np.empty((nClasses, nSamples))
+    cm_total = np.empty((nClasses*2, nSamples))
     acc_total = np.empty(nSamples)
     acc_std_total = np.empty(nSamples)
     accbal_total = np.empty(nSamples)
@@ -44,6 +45,7 @@ def classify_allsubsage(data, classifier, classifier_name, nSubs, nSamples, nFea
 
         # initialize evaluation metrics for each time point (averaged over k-folds)
         probs_kfold = np.zeros(nClasses)
+        cm_kfold = np.zeros(nClasses*2)
         acc_kfold = np.zeros(1)
         acc_std_kfold = []
         accbal_kfold = np.zeros(1)
@@ -110,6 +112,7 @@ def classify_allsubsage(data, classifier, classifier_name, nSubs, nSamples, nFea
 
             # f. evaluate classifier
             probs_kfold += np.mean(y_pred_prob, axis=0)
+            cm_kfold += confusion_matrix(y_test_orig, y_pred).reshape(nClasses * 2)
             acc_kfold += accuracy_score(y_test_orig, y_pred)
             acc_std_kfold.append(accuracy_score(y_test_orig, y_pred))
             accbal_kfold += balanced_accuracy_score(y_test_orig, y_pred)
@@ -138,6 +141,7 @@ def classify_allsubsage(data, classifier, classifier_name, nSubs, nSamples, nFea
 
         # save an average of kfold scores for specific time point
         probs_total[:, itime] = np.float64(probs_kfold / nFolds)
+        cm_total[:, itime] = np.float64(cm_kfold / nFolds)
         acc_total[itime] = np.float64(acc_kfold / nFolds)
         acc_std_total[itime] = np.std(acc_std_kfold)
         accbal_total[itime] = np.float64(accbal_kfold / nFolds)
@@ -157,6 +161,7 @@ def classify_allsubsage(data, classifier, classifier_name, nSubs, nSamples, nFea
 
     results = {
         "probs_total": probs_total,
+        "cm_total": cm_total,
         "acc_total": acc_total,
         "acc_std_total": acc_std_total,
         "accbal_total": accbal_total,
@@ -168,8 +173,8 @@ def classify_allsubsage(data, classifier, classifier_name, nSubs, nSamples, nFea
         "f1_total": f1_total,
         "importance_acc_total": importance_acc_total,
         "importance_acc_std_total": importance_acc_std_total,
-        "importance_accbal_total": importance_acc_total,
-        "importance_accbal_std_total": importance_acc_std_total,
+        "importance_accbal_total": importance_accbal_total,
+        "importance_accbal_std_total": importance_accbal_std_total,
         "importance_auc_total": importance_auc_total,
         "importance_auc_std_total": importance_auc_std_total,
         "importance_mi_total": importance_mi_total,

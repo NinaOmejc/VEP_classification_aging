@@ -1,22 +1,28 @@
+% The script extracts the statistical ERP features from the participant's
+% preprocessed set files. 
+% 8.12.2022, Nina Omejc
+
 clear all
 close all
 eeglab nogui; % start EEGLAB under Matlab 
 
-data_version = 'v1';
-filePathIn = ['N:\SloMoBIL\classification_paper\data\raw_data\']; 
-filePathOut = ['N:\SloMoBIL\classification_paper\data\data_for_classification\matlab\'];
+data_version = 'v0';
+path_main = pwd;
+path_dataIn = [path_main + '\data_eeglab\']; % path to set files
+path_dataOut = [path_main + '\data_for_classification\'];
 cd(filePathIn);
 rawDataFiles = dir('*ar.set');
 
-elec_clusts = [30:32; 15:17];
+elec_clusts_idx = [30:32; 15:17];
 elec_clusts_names = {'occ'; 'cen'};
 comps = {'P1'; 'N1'; 'P2'; 'P3'};
 comp_locs = {'occ'; 'occ'; 'occ'; 'cen'};
-comp_times = {50:100; 100:200; 200:350; 250:500};
-comp_timeidx = {65:78; 78:103; 103:141; 116:180};
+comp_times = {50:150; 100:200; 200:325; 250:500}; % time windows were chosen based on zero-crossings in the group averaged ERP 
+comp_timeidx = {65:90; 78:103; 103:135; 116:180};
 params = {'PA', 'MA', 'PL', 'FL'};
 n_trials = 147; % 23 rare + 124 freq
-n_trials_threshold = 100;
+n_trials_threshold = 100; % if participant has less good trials then this threshold, remove complete dataset of the participant
+noise_threshold = 100; % absolute threshold above which the trials are removed
 
 y_age = {};
 y_stim = {};
@@ -49,6 +55,21 @@ for idataFile = 1:length(rawDataFiles)
        end
        ie = ie + 1;
     end
+
+    % remove artifacts
+    bad_trials = zeros(1, EEG.trials);
+    for itrial = 1:EEG.trials
+        data_to_check = EEG.data(sort(reshape(elec_clusts, [], 1)), :, itrial);
+        [bad_elects, bad_tps] = find(data_to_check > noise_threshold | data_to_check < -noise_threshold);
+        if any(bad_elects)
+            bad_trials(itrial) = 1;
+        end
+    end
+    disp(['Number of bad trials detected: ' num2str(sum(bad_trials))])
+    EEG.data = EEG.data(:, :, ~bad_trials);
+    EEG.event(find(bad_trials)) = [];
+    EEG.trials = size(EEG.event, 2);
+    
     % remove events if too many or remove subjects if it doesnt have enough events
     if size(EEG.event, 2) > n_trials
         EEG.event(148:end) = [];
@@ -154,7 +175,18 @@ X_features = {'X_P1_PA', 'X_P1_MA', 'X_P1_PL', 'X_P1_FL', ...
               'X_P2_PA', 'X_P2_MA', 'X_P2_PL', 'X_P2_FL', ...
               'X_P3_PA', 'X_P3_MA', 'X_P3_PL', 'X_P3_FL'};
 
-time_info = EEG.times;
+time_info_orig = EEG.times;
+time_info_reduced = EEG.times;
 chan_info = [{EEG.chanlocs.labels}]';
 
-%save([filePathOut 'data_' data_version '_notime.mat'], "X", "IDs", "y", "yi", "y_cats", "X_features", "time_info", "chan_info", "elec_clusts", "elec_clusts_names")
+save([filePathOut 'data_' data_version '_notime.mat'], "X", "IDs", "y", "yi", "y_cats", "X_features", "time_info_orig", "time_info_reduced", "chan_info", "elec_clusts_idx", "elec_clusts_names")
+
+% choose specific features only:
+data_version = 'v00';
+chosen_features = [1, 3, 5, 7, 9, 11, 13, 15];
+X_features = X_features(chosen_features);
+X = X(:, :, chosen_features);
+save([path_dataOut 'data_' data_version '_notime.mat'], "X", "IDs", "y", "yi", "y_cats", "X_features", "time_info_orig", "time_info_reduced", "chan_info", "elec_clusts_idx", "elec_clusts_names")
+
+
+

@@ -1,20 +1,23 @@
+% The script extracts the temporal features from the participant's
+% preprocessed set files. 
+% 8.12.2022, Nina Omejc
+
 clear all
 close all
 eeglab nogui; % start EEGLAB under Matlab 
 
-data_version = 'v3';
-%filePathIn = ['N:\GIBKOP\EEG\EEGLAB\2_intermediate_analyis_data\pre\']; 
-%filePathOut = ['N:\MPŠ\DataMining\Seminar\data_erp_mat\'];
-%filePathIn = ['D:\MPŠ\DataMining\Seminar\data_eeglab'];
-filePathIn = ['N:\MPŠ\DataMining\Seminar\data_eeglab\']; 
-filePathOut = ['N:\SloMoBIL\classification_paper\data\data_for_classification\matlab\'];
-cd(filePathIn);
+data_version = 'v0';
+path_main = pwd;
+path_dataIn = [path_main + '\data_eeglab\']; % path to set files
+path_dataOut = [path_main + '\data_for_classification\'];
+cd(path_dataIn);
 rawDataFiles = dir('*ar.set');
 
-elec_clusts = [30:32; 24:26; 15:17; 6:8];
+elec_clusts_idx = [30:32; 24:26; 15:17; 6:8];
 elec_clusts_names = {'occipital'; 'parietal'; 'central'; 'frontal'};
 n_trials = 147; % 23 rare + 124 freq
-n_trials_threshold = 100;
+n_trials_threshold = 100; % if participant has less good trials then this threshold, remove complete dataset of the participant
+noise_threshold = 100; % absolute threshold above which the trials are removed
 
 y_age = {};
 y_stim = {};
@@ -27,13 +30,13 @@ for idataFile = 1:length(rawDataFiles)
     isub = isub + 1;
     loadName = rawDataFiles(idataFile).name;
     dataName = loadName(1:end-4);
-    EEG = pop_loadset('filename', loadName,'filepath', filePathIn);
+    EEG = pop_loadset('filename', loadName,'filepath', path_dataIn);
     disp(['Loaded subject data:', num2str(isub)])
 
     % remove double events
     ie = 1;
     while ie < size(EEG.event, 2) 
-       if ~(strcmp(EEG.event(ie).codelabel, 'white') | strcmp(EEG.event(ie).codelabel, 'einstein'))
+       if ~(strcmp(EEG.event(ie).codelabel, 'white') || strcmp(EEG.event(ie).codelabel, 'einstein'))
           EEG.event(ie) = [];
        end
        if sum([EEG.event.bepoch] == EEG.event(ie).bepoch) == 2
@@ -42,6 +45,21 @@ for idataFile = 1:length(rawDataFiles)
        end
        ie = ie + 1;
     end
+    
+    % remove artifacts with absolute value above the threshold
+    bad_trials = zeros(1, EEG.trials);
+    for itrial = 1:EEG.trials
+        data_to_check = EEG.data(sort(reshape(elec_clusts_idx, [], 1)), :, itrial);
+        [bad_elects, bad_tps] = find(data_to_check > noise_threshold | data_to_check < -noise_threshold);
+        if any(bad_elects)
+            bad_trials(itrial) = 1;
+        end
+    end
+    disp(['Number of bad trials detected: ' num2str(sum(bad_trials))])
+    EEG.data = EEG.data(:, :, ~bad_trials);
+    EEG.event(find(bad_trials)) = [];
+    EEG.trials = size(EEG.event, 2);
+
     % remove events if too many or remove subjects if it doesnt have enough events
     if size(EEG.event, 2) > n_trials
         EEG.event(148:end) = [];
@@ -78,7 +96,7 @@ for idataFile = 1:length(rawDataFiles)
     for ichanclust = 1:length(elec_clusts_names)
 
         ichan_timefreq = zeros(EEG.trials, EEG.pnts, num_freqs);
-        EEG_ichan_data = squeeze(mean(EEG.data(elec_clusts(ichanclust, :),:,:)));
+        EEG_ichan_data = squeeze(mean(EEG.data(elec_clusts_idx(ichanclust, :),:,:)));
         X_amp{ichanclust, 1} = EEG_ichan_data;
         X_amp{ichanclust, 2} = elec_clusts_names(ichanclust);
         disp(['Time freq analysis for: ', elec_clusts_names{ichanclust}])
@@ -110,10 +128,10 @@ for idataFile = 1:length(rawDataFiles)
 
     % merge labels and data 
     y = cat(1, y, cat(2, y_age, y_stim));
+
     X = cat(1, X, cat(3, X_amp{1, 1}', X_amp{2, 1}',X_amp{3, 1}',X_amp{4, 1}', ...
-                          X_tf{1, 1}, X_tf{2, 1}, X_tf{3, 1}, X_tf{4, 1}));
-    
-    % save subject ID
+                         X_tf{1, 1}, X_tf{2, 1}, X_tf{3, 1}, X_tf{4, 1}));
+
     X_ID =  repmat({isub}, EEG.trials, 1);
     X_ID = [string(X_ID), cat(2, y_age, y_stim)];
     IDs = [IDs; X_ID];
@@ -133,27 +151,29 @@ X_features = {'X_ampO', 'X_ampP', 'X_ampC', 'X_ampF', ...
               'X_tfC4', 'X_tfC8', 'X_tfC12', 'X_tfC16', 'X_tfC20', 'X_tfC24', 'X_tfC28', 'X_tfC32', 'X_tfC36',...              
               'X_tfF4', 'X_tfF8', 'X_tfF12', 'X_tfF16', 'X_tfF20', 'X_tfF24', 'X_tfF28', 'X_tfF32', 'X_tfF36'};
 
-time_info = EEG.times;
+time_info_orig = EEG.times;
+time_info_reduced = times;
 chan_info = [{EEG.chanlocs.labels}]';
 
-save([filePathOut 'data_' data_version '.mat'], "X", "IDs", "y", "yi", "y_cats", "X_features", "time_info", "chan_info", "elec_clusts", "elec_clusts_names")
+save([path_dataOut 'data_' data_version '.mat'], "X", "IDs", "y", "yi", "y_cats", "X_features", "time_info_orig", "time_info_reduced", "chan_info", "elec_clusts_idx", "elec_clusts_names")
 
+% choose specific features only:
+data_version = 'v2';
+chosen_features = [1:2, 4, 6, 13, 15];
+X_features = X_features(chosen_features);
+X = X(:, :, chosen_features);
+save([path_dataOut 'data_' data_version '.mat'], "X", "IDs", "y", "yi", "y_cats", "X_features", "time_info_orig", "time_info_reduced", "chan_info", "elec_clusts_idx", "elec_clusts_names")
 
-% Remove subject 25
-%
-% idx25 = [];
-% for id = 1:length(IDs)
-%     if IDs{id} == '25'
-%         idx25 = [idx25; id];
-%     end
-% end
-% 
-% idx = ismember(1:length(IDs),idx25);
-% IDs = IDs(~idx, :);
-% X = X(~idx, :, :);
-% y = y(~idx);
-% yi = yi(~idx);    
-% 
-% filePathOut = 'D:\Experiments\erp_classification_study\data\data_for_classification\matlab\data_v2.mat'
-% save(filePathOut, "X", "IDs", "y", "yi", "y_cats", "X_features", "time_info", "chan_info")
+data_version = 'v6';
+chosen_features = [1:4, 12, 21, 24 30];
+X_features = X_features(chosen_features);
+X = X(:, :, chosen_features);
+save([path_dataOut 'data_' data_version '.mat'], "X", "IDs", "y", "yi", "y_cats", "X_features", "time_info_orig", "time_info_reduced", "chan_info", "elec_clusts_idx", "elec_clusts_names")
+
+data_version = 'v7';
+chosen_features = [1, 3, 5, 6, 23, 24, 25, 32];
+X_features = X_features(chosen_features);
+X = X(:, :, chosen_features);
+save([path_dataOut 'data_' data_version '.mat'], "X", "IDs", "y", "yi", "y_cats", "X_features", "time_info_orig", "time_info_reduced", "chan_info", "elec_clusts_idx", "elec_clusts_names")
+
 

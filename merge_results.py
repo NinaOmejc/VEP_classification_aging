@@ -6,8 +6,8 @@ import pandas as pd
 ### IMPORT STUDY SETTINGS
 time_switch = '_notime'
 classification_type = 'bysub' + time_switch
-data_version = 'v1' + time_switch
-exp_version = 'v2'
+data_version = 'v0' + time_switch
+exp_version = 'v0'
 balancing = 'smote'
 ma_win = 0
 classifier_names = ['LDA', 'KNN', 'LR', 'Tree', 'AdaBoost', 'XGB', 'RF', 'SVC_lin', 'SVC_rbf']
@@ -23,20 +23,18 @@ elif classification_type == "bysub" + time_switch:
 elif classification_type == "allsubsage" + time_switch:
     target = "age"
 
-path_main = f"N:{os.sep}SloMoBIL{os.sep}classification_paper{os.sep}"
-#path_main = f"D:{os.sep}Experiments{os.sep}erp_classification_study{os.sep}"
-path_results_in = f"{path_main}results{os.sep}{classification_type}{os.sep}{exp_version}{os.sep}"
+path_main = os.getcwd()
+path_results_in = f"{path_main}{os.sep}results{os.sep}{classification_type}{os.sep}{exp_version}{os.sep}"
 
 general_info_filename = f"{path_results_in}classificaton_results_{classification_type}_dat{data_version}_exp{exp_version}_{balancing}_{target}_ma{ma_win}_general_info.pkl"
 with open(general_info_filename, 'rb') as f:
     general_info = pickle.load(f)
 
 feature_names = [general_info["feature_names"][i][0] for i in range(len(general_info["feature_names"]))]
-label_names = [general_info["label_names"][i][0] for i in range(len(general_info["label_names"]))]
+label_names = [general_info["label_names"][i] for i in range(len(general_info["label_names"]))]
 times = general_info["times"] if time_switch == '' else 0
 subID = general_info["subID"]
 age_compact = general_info["age_compact"]
-
 nSamples = len(times) if time_switch == '' else 1
 nSubj = len(np.unique(subID)) if classification_type == 'bysub' + time_switch else 1
 nClassifiers = len(classifier_names)
@@ -76,7 +74,7 @@ if classification_type == 'bysub' + time_switch:
     df_metrics['age'] = np.repeat(age_compact, nClassifiers*nSamples)
     df_metrics['sub'] = np.repeat(np.unique(subID), nClassifiers*nSamples)
     df_importances['age'] = np.repeat(age_compact, nClassifiers * nFeatures * nSamples)
-    df_importances['sub'] = np.repeat(np.unique(subID), nClassifiers * nFeatures * nSamples)
+    df_importances['sub'] = np.repeat(np.unique(subID), nSamples * nClassifiers * nFeatures)
 
     df_probs["sub"] = df_probs["sub"].astype("category")
     df_probs["age"] = df_probs["age"].astype("category")
@@ -86,8 +84,7 @@ if classification_type == 'bysub' + time_switch:
     df_importances["age"] = df_importances["age"].astype("category")
 
 # IMPORT RESULTS
-# clfIdx = 0
-# clfName = classifier_names[clfIdx]
+# clfIdx, clfName = 0, classifier_names[0]
 for clfIdx, clfName in enumerate(classifier_names):
 
     filename_results_in = f"classificaton_results_{classification_type}_dat{data_version}_exp{exp_version}_{balancing}_{target}_ma{ma_win}_{clfName}.pkl"
